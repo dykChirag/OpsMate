@@ -1,6 +1,8 @@
-# OpsMate v2
+# OpsMate
 
 **AI site reliability engineering for Zerops-hosted fleets.**
+
+Repo: [github.com/dykChirag/OpsMate](https://github.com/dykChirag/OpsMate)
 
 OpsMate sits beside your Zerops project (or a local sandbox “patient”) and turns platform signals into diagnosis, a weighted deployment health score, project-scoped chat, architecture findings, and guided remediation — without inventing another team’s services or mixing fleets.
 
@@ -48,9 +50,8 @@ Full docs: [`docs/`](./docs/).
 | [docs/DEPLOYMENT_HEALTH.md](./docs/DEPLOYMENT_HEALTH.md) | Weighted health score |
 | [docs/INCIDENTS.md](./docs/INCIDENTS.md) | Lifecycle, counts, grouping |
 | [docs/CHAT.md](./docs/CHAT.md) | Context assembly and scoping rules |
-| [docs/API.md](./docs/API.md) | HTTP surfaces and session auth |
+| [docs/API.md](./docs/API.md) | HTTP surfaces and Connect auth |
 | [docs/CHAOS_LAB.md](./docs/CHAOS_LAB.md) | Demo chaos triggers |
-| [docs/internal/](./docs/internal/) | Maintainer gotchas + release checklist |
 
 ## Tech stack
 
@@ -60,13 +61,17 @@ Full docs: [`docs/`](./docs/).
 | API | Express (`api/`), port **8080**, syslog **5514** |
 | Demo patient | Express (`demo-api/`), HTTP **3001**, metrics **9090** |
 | Database | Postgres 16 (`docker-compose.yml`, host **5433** → container 5432) |
-| Zerops | REST via `api/services/zeropsApi.js` with session-held PAT |
+| Zerops | REST via `api/services/zeropsApi.js` |
 | LLM | Groq primary → OpenRouter fallback → **rules** (`diagnosisEngine.js`). Keys in `api/.env` only |
 
 ## Local run
 
+From the **OpsMate** repo root ([clone](https://github.com/dykChirag/OpsMate)):
+
 ```bash
-cd "zerops v2"
+git clone https://github.com/dykChirag/OpsMate.git
+cd OpsMate
+
 docker compose up -d
 
 cd api && cp .env.example .env   # set DATABASE_URL to :5433 if using compose
@@ -96,7 +101,7 @@ Link managed Postgres `DATABASE_URL` and LLM keys on **api** in the Zerops GUI.
 
 ## Contributing
 
-Keep chat, health, and Services inventory on one scope path (`opsContext`). Run the [content checklist](./docs/internal/CONTENT_CHECKLIST.md) before demos. Prefer small PRs with migrations under `api/migrations/`.
+Keep chat, health, and Services inventory on one scope path (`opsContext`). Prefer small PRs with migrations under `api/migrations/`.
 
 ## License
 

@@ -1,4 +1,4 @@
-# OpsMate v2 monorepo root
+# OpsMate monorepo root
 node_modules/
 .env
 .env.*

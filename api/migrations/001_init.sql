@@ -1,4 +1,4 @@
--- OpsMate v2 schema — safe for fresh DBs and upgrades from v1-style incidents
+-- OpsMate schema — safe for fresh DBs and upgrades from earlier incident layouts
 
 -- 1) Base table (old shape OK if already exists)
 CREATE TABLE IF NOT EXISTS incidents (

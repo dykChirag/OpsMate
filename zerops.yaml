@@ -1,4 +1,4 @@
-# OpsMate v2 monorepo — repo-root build (Zerops clones here by default)
+# OpsMate monorepo — repo-root build (Zerops clones here by default)
 # Setup names: demo (patient), api, dashboard — match Zerops service hostnames (no hyphens).
 #
 # ~ in deployFiles strips the path prefix so files land in /var/www at runtime.

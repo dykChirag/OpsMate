@@ -1,6 +1,6 @@
 # Architecture
 
-OpsMate v2 is a multi-process SRE console for **Zerops** fleets and a **local sandbox** demo patient. This document describes components, data flow, and modes as implemented under `zerops v2/`.
+OpsMate is a multi-process SRE console for **Zerops** fleets and a **local sandbox** demo patient. This document describes components, data flow, and modes as implemented in the [OpsMate](https://github.com/dykChirag/OpsMate) monorepo (`api/`, `dashboard/`, `demo-api/`).
 
 See also: [DEPLOYMENT_HEALTH](./DEPLOYMENT_HEALTH.md) · [INCIDENTS](./INCIDENTS.md) · [CHAT](./CHAT.md) · [API](./API.md) · [CHAOS_LAB](./CHAOS_LAB.md)
 
@@ -143,7 +143,7 @@ Controlled primarily by `resolveProjectScope(req)` in `opsContext.js`.
 - Live: Zerops service list only (empty list if API fails — do not invent hosts).
 - Sandbox: always `SANDBOX_INVENTORY`, not `[]`.
 
-Cross-cutting access goes through `buildOpsContext` so `/chat` and `/status` (and health) do not diverge. Maintainer deep-dive: [internal/GOTCHAS.md](./internal/GOTCHAS.md).
+Cross-cutting access goes through `buildOpsContext` so `/chat` and `/status` (and health) do not diverge.
 
 ---
 
