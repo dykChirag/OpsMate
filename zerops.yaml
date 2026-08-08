@@ -1,0 +1,89 @@
+# OpsMate v2 monorepo — repo-root build (Zerops clones here by default)
+# Setup names: demo (patient), api, dashboard — match Zerops service hostnames (no hyphens).
+#
+# ~ in deployFiles strips the path prefix so files land in /var/www at runtime.
+# Migrations run automatically on api start (db.runMigrations in server.js).
+
+zerops:
+  # ─── Demo patient (chaos + metrics) ───────────────────────────────────────
+  - setup: demo
+    build:
+      base: nodejs@22
+      buildCommands:
+        - cd demo-api && npm ci --omit=dev
+      deployFiles:
+        - demo-api/~
+      cache:
+        - demo-api/node_modules
+    run:
+      base: nodejs@22
+      envVariables:
+        NODE_ENV: production
+        PORT: "3001"
+        METRICS_PORT: "9090"
+        ZEROPS_PROMETHEUS_PORT: "9090"
+        SERVICE_NAME: demo
+        # Private hostname of the api service in this project
+        API_INGEST_URL: http://api:8080/ingest
+      ports:
+        - port: 3001
+          httpSupport: true
+        - port: 9090
+          httpSupport: false
+      start: node index.js
+
+  # ─── OpsMate brain (ingest, diagnose, chat, Zerops session) ───────────────
+  - setup: api
+    build:
+      base: nodejs@22
+      buildCommands:
+        - cd api && npm ci --omit=dev
+      # Strip `api/` prefix so runtime lives at /var/www with node server.js
+      deployFiles:
+        - api/~
+      cache:
+        - api/node_modules
+    run:
+      base: nodejs@22
+      envVariables:
+        NODE_ENV: production
+        PORT: "8080"
+        SYSLOG_PORT: "5514"
+        DEMO_API_URL: http://demo:3001
+        DEMO_SERVICE_NAME: demo
+        # Link DATABASE_URL from managed Postgres in Zerops GUI (required)
+        # GROQ_API_KEY / OPENROUTER_API_KEY / SESSION_SECRET — set in GUI
+        OPENROUTER_MODEL: openai/gpt-oss-20b:free
+      ports:
+        - port: 8080
+          httpSupport: true
+        - port: 5514
+          httpSupport: false
+      # Migrations run inside server.js bootstrap — no separate init command
+      start: node server.js
+
+  # ─── Dashboard SPA + runtime /config.json (serve.js) ──────────────────────
+  - setup: dashboard
+    build:
+      base: nodejs@22
+      buildCommands:
+        - cd dashboard && npm ci
+        - cd dashboard && npm run build
+      deployFiles:
+        - dashboard/~/dist
+        - dashboard/~/serve.js
+        - dashboard/~/package.json
+      cache:
+        - dashboard/node_modules
+    run:
+      base: nodejs@22
+      envVariables:
+        NODE_ENV: production
+        PORT: "3000"
+        # After first deploy, set public https URLs in Zerops GUI:
+        # PUBLIC_API_URL=https://api-<project>.zerops.app
+        # PUBLIC_DEMO_URL=https://demo-<project>.zerops.app
+      ports:
+        - port: 3000
+          httpSupport: true
+      start: node serve.js

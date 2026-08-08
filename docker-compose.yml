@@ -1,0 +1,16 @@
+# Local Postgres for OpsMate v2
+# Host port 5433 — avoids clash with other projects already on 5432
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: opsmate
+      POSTGRES_PASSWORD: opsmate_secret
+      POSTGRES_DB: opsmate
+    ports:
+      - "5433:5432"
+    volumes:
+      - opsmate_v2_pg:/var/lib/postgresql/data
+
+volumes:
+  opsmate_v2_pg:

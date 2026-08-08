@@ -1,0 +1,21 @@
+# OpsMate v2 monorepo root
+node_modules/
+.env
+.env.*
+!.env.example
+*.log
+npm-debug.log*
+.DS_Store
+.idea/
+.vscode/
+.tmp/
+*.pem
+.local/
+
+# OS / editor
+Thumbs.db
+Desktop.ini
+
+# Local dump / secrets accidents
+*.sql.gz
+credentials*.json

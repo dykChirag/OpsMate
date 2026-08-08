@@ -1,0 +1,13 @@
+# OpsMate API — secrets and local deps never go to git
+node_modules/
+.env
+.env.*
+!.env.example
+*.log
+npm-debug.log*
+.DS_Store
+coverage/
+.tmp/
+*.pem
+.idea/
+.vscode/
