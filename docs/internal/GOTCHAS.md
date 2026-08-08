@@ -54,9 +54,15 @@ Documented in [DEPLOYMENT_HEALTH.md](../DEPLOYMENT_HEALTH.md).
 
 ---
 
-## 6. Auth confusion
+## 6. Auth: cross-origin cookie loss (production)
 
-OpsMate does **not** accept client `Authorization: Bearer` for the user’s PAT. PAT enters via `POST /zerops/connect` into cookie session (or server env). Bearer is only outbound toward Zerops/LLM.
+**Symptom:** Deployed dashboard shows projects after Connect, but `/zerops/me` is `connected: false` and `select-project` returns **401**.
+
+**Cause:** Dashboard and API on different Zerops public hosts (`dashboard-…` vs `api-…`). Browser often does not keep `opsmate.sid` for cross-origin fetch; Connect returns projects in the **response body** so the UI looks connected while later requests have no session.
+
+**Fix:** Dashboard keeps PAT (and selected project) in **sessionStorage** and sends `Authorization: Bearer` + `X-OpsMate-Project-*` on every `apiFetch`. API resolves via `reqAuth.js` (Bearer → cookie → env). Cookies remain a best-effort same-origin path.
+
+**Rule:** Do **not** document “cookie only” or “never send client Bearer” for OpsMate identity. Outbound Bearer to Zerops/LLM is separate; inbound Bearer to OpsMate is intentional for multi-host deploys.
 
 ---
 
@@ -64,4 +70,5 @@ OpsMate does **not** accept client `Authorization: Bearer` for the user’s PAT.
 
 1. New UI metric over incidents → use `countIncidentsByStatus` or documented open filters.  
 2. New copy claiming “N services” → same inventory as `/status`.  
-3. New live-only tool → disable or 403 when no selected project; never break live from chaos paths.
+3. New live-only tool → disable or 403 when no selected project; never break live from chaos paths.  
+4. New authenticated client call → go through `apiFetch` so Bearer/project headers are attached.

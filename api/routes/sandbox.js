@@ -141,7 +141,12 @@ async function fireViaLocalDiagnose(type) {
 }
 
 router.post('/chaos', async (req, res) => {
-  if (req.session?.zeropsToken && req.session?.zeropsProjectId) {
+  const { getToken, getSelectedProject } = require('../services/reqAuth');
+  const live =
+    getToken(req) &&
+    getSelectedProject(req) &&
+    getSelectedProject(req) !== 'sandbox';
+  if (live) {
     return res.status(403).json({
       ok: false,
       error: 'Chaos lab is disabled while a Zerops project is selected',

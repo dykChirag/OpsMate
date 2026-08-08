@@ -14,7 +14,7 @@ See also: [ARCHITECTURE](./ARCHITECTURE.md) · [API](./API.md) · [INCIDENTS](./
 { "question": "Why is the deployment unhealthy right now?" }
 ```
 
-Optional body `projectId` / `projectName` is **ignored when a Connect session already holds a different project** (session wins).
+Optional body `projectId` / `projectName` is **ignored when an active PAT already holds a different project** (Bearer/session project wins).
 
 Handler: `api/routes/chat.js` → `buildOpsContext(req, { syncFleet: true })` → `chatContextPayload(ops)`.
 
@@ -67,7 +67,7 @@ These are **product requirements**, not soft style tips:
 1. **Only** the scoped project’s inventory and incidents may appear in answers.
 2. **`openIncidentCount` is open-only** — never open+resolved as “open”.
 3. If **`serviceCount > 0` / inventory non-empty**, the model must **not** claim “no services listed”.
-4. Body `projectId` cannot pull a third project over an active session selection.
+4. Body `projectId` cannot pull a third project over an active PAT selection.
 5. Single-turn context only — prior chat turns are **not** sent to the model (avoids stale health numbers).
 
 System prompt in `chat.js` (`CHAT_SYSTEM`) encodes the same rules.
@@ -89,7 +89,7 @@ Rules path still uses real `ops.openIncidents` and `ops.serviceNames` (including
 ## UI integration
 
 Dashboard default chat prompt may be *“Why is the deployment unhealthy right now?”*.  
-Refresh path uses cookie session so Connect state matches Health without re-sending PAT.
+Refresh path uses the same auth as Connect (cookie and/or Bearer + project headers) so Health and Chat share scope without re-prompting for the PAT.
 
 ---
 

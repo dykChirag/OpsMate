@@ -26,15 +26,26 @@ const SANDBOX_INVENTORY = [
  * body.projectId is NEVER trusted over an active Connect session.
  * Env ZEROPS_PROJECT_ID is only for headless/local without a session.
  */
+const {
+  getToken: resolveToken,
+  getSelectedProject: resolveSelectedProject,
+  getSelectedProjectName: resolveSelectedProjectName,
+} = require('./reqAuth');
+
 function resolveProjectScope(req) {
-  const sessionToken = req.session?.zeropsToken || null;
-  const sessionProjectId = req.session?.zeropsProjectId
-    ? String(req.session.zeropsProjectId)
-    : null;
-  const sessionProjectName = req.session?.zeropsProjectName || null;
+  // Bearer header and/or session (cross-origin uses Bearer; local uses cookie)
+  const sessionToken = resolveToken(req);
+  const sessionProjectId = resolveSelectedProject(req);
+  const sessionProjectName = resolveSelectedProjectName(req);
   const envToken = process.env.ZEROPS_API_TOKEN || null;
   const envProjectId = process.env.ZEROPS_PROJECT_ID || null;
   const envProjectName = process.env.ZEROPS_PROJECT_NAME || null;
+  const scopeSrc = (() => {
+    const h = req.headers.authorization || req.headers.Authorization;
+    if (h) return 'bearer';
+    if (req.session?.zeropsToken) return 'session';
+    return 'token';
+  })();
 
   const bodyProjectIdRaw = req.body?.projectId ?? req.query?.projectId;
   const bodyProjectId =
@@ -44,7 +55,7 @@ function resolveProjectScope(req) {
   const bodyProjectName =
     req.body?.projectName != null ? String(req.body.projectName) : null;
 
-  // Active Connect session: server session is source of truth for project
+  // Active Connect session / Bearer: project from headers or server session
   if (sessionToken) {
     if (
       bodyProjectId &&
@@ -69,7 +80,7 @@ function resolveProjectScope(req) {
         projectId: sessionProjectId,
         projectName: sessionProjectName ? String(sessionProjectName) : null,
         mode: 'live',
-        source: 'session',
+        source: scopeSrc,
       };
     }
 
@@ -79,7 +90,7 @@ function resolveProjectScope(req) {
       projectId: 'sandbox',
       projectName: 'Local sandbox',
       mode: 'connected-no-project',
-      source: 'session',
+      source: scopeSrc,
     };
   }
 

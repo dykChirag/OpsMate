@@ -18,7 +18,7 @@ OpsMate sits beside your Zerops project (or a local sandbox “patient”) and t
 2. Select a project. Health, incidents, chat, and inventory scope to that `project_id` only.
 3. **Chaos lab is disabled** while a live project is selected (deliberate). Restart may call the Zerops API when a stack matches.
 
-Token lives in the API **cookie session** (`opsmate.sid`), not Postgres.
+Token is **never written to Postgres**. On multi-host Zerops deploys the dashboard holds it in **sessionStorage** and sends `Authorization: Bearer` (cookies alone often fail cross-origin). Local same-origin still uses the API cookie session when available.
 
 ## The ops loop
 

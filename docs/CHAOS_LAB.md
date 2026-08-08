@@ -8,13 +8,9 @@ See also: [INCIDENTS](./INCIDENTS.md) · [API](./API.md)
 
 ## Availability rule
 
-`POST /sandbox/chaos` returns **403** when:
+`POST /sandbox/chaos` returns **403** when a **live project is selected** — i.e. `getToken(req)` is set and `getSelectedProject(req)` is a non-sandbox project id (Bearer header, cookie session, or env).
 
-```text
-req.session.zeropsToken && req.session.zeropsProjectId
-```
-
-i.e. a **live project is selected**. Connect-without-project remains allowed. Live fleets are never broken from the lab UI.
+Connect-without-project remains allowed. Live fleets are never broken from the lab UI.
 
 ---
 

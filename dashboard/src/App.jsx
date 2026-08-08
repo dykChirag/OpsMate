@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { apiFetch, loadConfig } from './api.js';
+import { apiFetch, loadConfig, setAuthPat, setAuthProject, clearAuth } from './api.js';
 import profilePic from '../assests/Profile.jpg';
 
 const CREATOR = {
@@ -479,7 +479,7 @@ function StoryLanding({ onEnter, onConnect, healthScore, healthMode }) {
           <a href="#how">How</a>
           <a href="#demo">Demo vs live</a>
         </div>
-        <div className="btn-row">
+        <div className="btn-row story-nav-cta">
           <button type="button" className="btn btn-ghost" onClick={onEnter}>
             {STORY_CTA.primary}
           </button>
@@ -701,7 +701,7 @@ function StoryLanding({ onEnter, onConnect, healthScore, healthMode }) {
           <button type="button" className="btn btn-primary" onClick={onEnter}>
             {STORY_CTA.primary}
           </button>
-          <button type="button" className="btn btn-ghost" onClick={onConnect}>
+          <button type="button" className="btn story-end-secondary" onClick={onConnect}>
             {STORY_CTA.secondary}
           </button>
         </div>
@@ -2061,9 +2061,13 @@ export default function App() {
     setConnectBusy(true);
     setBusy('connect', true);
     try {
+      const raw = token.trim();
+      // Store before request so connect + follow-up /me use Authorization if cookies fail
+      setAuthPat(raw);
+      setAuthProject(null);
       const res = await apiFetch('/zerops/connect', {
         method: 'POST',
-        body: JSON.stringify({ token: token.trim() }),
+        body: JSON.stringify({ token: raw }),
       });
       setToken('');
       setProjects(res.projects || []);
@@ -2075,6 +2079,7 @@ export default function App() {
       }
       await refresh();
     } catch (err) {
+      clearAuth();
       flash(err.message);
     } finally {
       setConnectBusy(false);
@@ -2102,6 +2107,8 @@ export default function App() {
   async function selectProject(p) {
     setBusy(`selectProject:${p.id}`, true);
     try {
+      // Headers keep project on later polls even if cookies never stick
+      setAuthProject(p.id, p.name);
       const res = await apiFetch('/zerops/select-project', {
         method: 'POST',
         body: JSON.stringify({ projectId: p.id, projectName: p.name }),
@@ -2109,6 +2116,7 @@ export default function App() {
       setZeropsServices(res.services || p.services || []);
       setMe((m) => ({
         ...m,
+        connected: true,
         selectedProjectId: p.id,
         selectedProjectName: p.name,
       }));
@@ -2134,6 +2142,7 @@ export default function App() {
     setBusy('disconnect', true);
     try {
       await apiFetch('/zerops/disconnect', { method: 'POST' }).catch(() => {});
+      clearAuth();
       setMe({ connected: false });
       setProjects([]);
       setZeropsServices([]);
@@ -3509,7 +3518,7 @@ export default function App() {
                   </li>
                   <li>
                     <span className="n">2</span>
-                    <span>Connect here — token stays in the api session only (never in Postgres/localStorage)</span>
+                    <span>Connect here — token is held in this browser tab (sessionStorage) and sent as Bearer to the API (never Postgres)</span>
                   </li>
                   <li>
                     <span className="n">3</span>

@@ -1,18 +1,24 @@
 'use strict';
 
+const {
+  getToken,
+  getSelectedProject,
+  getSelectedProjectName,
+} = require('./reqAuth');
+
 /**
  * Resolve which project scope the current request operates in.
- * - Session PAT + selected project → that project_id (never fall through to env project)
- * - Session PAT, no project → sandbox
- * - No session → env project if any, else sandbox
+ * - Bearer/session PAT + selected project → that project_id
+ * - PAT, no project → sandbox
+ * - No PAT → env project if any, else sandbox
  */
 function getProjectScope(req) {
-  const sessionToken = req.session?.zeropsToken || null;
-  const sessionId = req.session?.zeropsProjectId || null;
-  const sessionName = req.session?.zeropsProjectName || null;
+  const sessionToken = getToken(req);
+  const sessionId = getSelectedProject(req);
+  const sessionName = getSelectedProjectName(req);
 
   if (sessionToken) {
-    if (sessionId) {
+    if (sessionId && sessionId !== 'sandbox') {
       return {
         projectId: String(sessionId),
         projectName: sessionName ? String(sessionName) : null,

@@ -25,8 +25,14 @@ const PORT = parseInt(process.env.PORT || '8080', 10);
 const app = express();
 
 app.use(cors({
-  origin:      true,     // reflect the request origin — tighten in prod if needed
+  origin:      true,     // reflect request origin (dashboard subdomain)
   credentials: true,
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'X-OpsMate-Project-Id',
+    'X-OpsMate-Project-Name',
+  ],
 }));
 
 // Parse both JSON and plain-text bodies (for raw syslog-like POSTs)
@@ -35,20 +41,31 @@ app.use(express.text({ type: 'text/plain' }));
 
 app.set('trust proxy', 1);
 
-// Session — memory store; Zerops PAT never written to disk or Postgres
+// Session — memory store; Zerops PAT never written to disk or Postgres.
+// When dashboard & api are different HTTPS hosts, browsers often block
+// cross-origin cookies — SPA also sends Authorization: Bearer (see reqAuth).
+const isProd = process.env.NODE_ENV === 'production';
 app.use(session({
   secret:            process.env.SESSION_SECRET || 'opsmate-dev-secret-change-me',
   resave:            false,
   saveUninitialized: false,
   name:              'opsmate.sid',
+  proxy:             true,
   cookie: {
     httpOnly: true,
-    // sameSite none needed when dashboard & api are different public hosts on HTTPS
-    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-    secure:   process.env.NODE_ENV === 'production',
+    sameSite: isProd ? 'none' : 'lax',
+    secure:   isProd,
     maxAge:   8 * 60 * 60 * 1000,
   },
 }));
+
+const { hydrateSessionFromRequest } = require('./services/reqAuth');
+app.use((req, _res, next) => {
+  try {
+    hydrateSessionFromRequest(req);
+  } catch { /* ignore */ }
+  next();
+});
 
 // ─── Request logging middleware ───────────────────────────────────────────────
 app.use((req, _res, next) => {

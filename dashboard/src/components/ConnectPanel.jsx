@@ -1,11 +1,10 @@
 import React, { useState } from 'react';
-import { apiFetch } from '../api.js';
+import { apiFetch, setAuthPat, clearAuth, setAuthProject } from '../api.js';
 
 /**
- * ConnectPanel — OPTIONAL, additive-only Zerops account connect panel.
- * Visually separated from the primary sandbox view.
- * Token is stored ONLY in server-side session — never in localStorage,
- * never logged, never persisted to DB.
+ * Optional legacy connect panel (main UI is App.jsx Connect view).
+ * PAT stays in browser sessionStorage + Authorization header on API calls —
+ * never written to Postgres.
  */
 export function ConnectPanel() {
   const [open,       setOpen]       = useState(false);
@@ -21,15 +20,19 @@ export function ConnectPanel() {
     setStatus('loading');
     setError(null);
     try {
+      const raw = token.trim();
+      setAuthPat(raw);
+      setAuthProject(null);
       const res = await apiFetch('/zerops/connect', {
         method: 'POST',
-        body:   JSON.stringify({ token: token.trim() }),
+        body:   JSON.stringify({ token: raw }),
       });
       setUser(res.user);
-      setToken('');   // clear from UI immediately after submission
+      setToken('');
       setStatus('connected');
       await loadProjects();
     } catch (err) {
+      clearAuth();
       setStatus('error');
       setError(err.message);
     }
@@ -46,6 +49,7 @@ export function ConnectPanel() {
 
   async function disconnect() {
     await apiFetch('/zerops/disconnect', { method: 'POST' }).catch(() => {});
+    clearAuth();
     setStatus('idle');
     setUser(null);
     setProjects(null);

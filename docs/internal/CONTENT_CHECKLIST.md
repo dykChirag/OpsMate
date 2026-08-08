@@ -46,10 +46,10 @@ Maps directly to failures already fixed once — see [GOTCHAS.md](./GOTCHAS.md).
 
 ## Deploy / config
 
+- [ ] Cross-host deploy: Connect → select project → `/zerops/me` shows `connected: true` (Bearer, not cookies alone).
 - [ ] `DATABASE_URL` matches compose port when using docker Postgres.
 - [ ] LLM keys optional; rules-only mode still answers chat with inventory facts.
-- [ ] Session cookie works across dashboard origin (CORS credentials + sameSite).
-
+- [ ] Session cookie works for local same-origin (`credentials` + `sameSite`); production multi-host relies on Bearer.
 ---
 
 ## Sign-off

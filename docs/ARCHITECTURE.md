@@ -118,15 +118,16 @@ Controlled primarily by `resolveProjectScope(req)` in `opsContext.js`.
 
 | Mode | When | Inventory | Incidents project_id | Chaos lab |
 |------|------|-----------|----------------------|-----------|
-| **sandbox** | No session project; no env live project | `SANDBOX_INVENTORY` | `'sandbox'` | Enabled |
-| **connected-no-project** | Session PAT, no project selected | Sandbox inventory | `'sandbox'` | Enabled |
-| **live** | Session (or env) token + project id | `zeropsApi.listProjectServices` | Selected Zerops id | **Disabled** (`POST /sandbox/chaos` → 403) |
+| **sandbox** | No token / no live project | `SANDBOX_INVENTORY` | `'sandbox'` | Enabled |
+| **connected-no-project** | PAT present (Bearer or session), no project selected | Sandbox inventory | `'sandbox'` | Enabled |
+| **live** | PAT + project id (Bearer headers, session, or env) | `zeropsApi.listProjectServices` | Selected Zerops id | **Disabled** (`POST /sandbox/chaos` → 403) |
 
 ### Shared
 
 - Schema, diagnosis pipeline, health formula shape.
-- Cookie session for dashboard ↔ API.
-- Optional env `ZEROPS_API_TOKEN` / `ZEROPS_PROJECT_ID` for headless ops (not browser Bearer).
+- Auth via cookie session **and/or** `Authorization: Bearer` + project headers (`reqAuth.js`); see [API.md](./API.md).
+- Optional env `ZEROPS_API_TOKEN` / `ZEROPS_PROJECT_ID` for headless ops.
+- Dashboard multi-host deploys keep the PAT in **sessionStorage** and resend it on every request (not written to Postgres).
 
 ### Isolated
 
@@ -163,7 +164,7 @@ Cross-cutting access goes through `buildOpsContext` so `/chat` and `/status` (an
 
 ## Known limitations
 
-- Session store is in-memory (`express-session` default) — reconnect clears PAT unless env defaults exist.
+- Cookie session is in-memory — API restarts drop it; tab sessionStorage can still re-auth via Bearer until disconnect / tab close.
 - LLM provider chain is server-env only; free-tier models rate-limit under stress.
 - Architecture YAML from inventory is incomplete vs GUI export (product labels reconstructed YAML as such).
 - Metrics/syslog are strongest in sandbox; live fleets lean on Zerops status + ingested logs when available.

@@ -2,22 +2,13 @@
 
 const { Router } = require('express');
 const zeropsApi  = require('../services/zeropsApi');
+const {
+  getToken,
+  getSelectedProject,
+  getSelectedProjectName,
+} = require('../services/reqAuth');
 
 const router = Router();
-
-function getToken(req) {
-  return req.session?.zeropsToken
-    || process.env.ZEROPS_API_TOKEN
-    || null;
-}
-
-function getSelectedProject(req) {
-  // Session wins — don't override a connected GUI with env OpsMate project
-  if (req.session?.zeropsToken) {
-    return req.session.zeropsProjectId || null;
-  }
-  return process.env.ZEROPS_PROJECT_ID || null;
-}
 
 // POST /zerops/connect  { token }
 router.post('/connect', async (req, res) => {
@@ -39,28 +30,44 @@ router.post('/connect', async (req, res) => {
   delete req.session.zeropsProjectName;
 
   const projects = await zeropsApi.listProjects(token, v.clientIds || []);
-  if (!projects.ok) {
-    return res.json({
-      ok: true,
-      user: v.user,
-      projects: [],
-      projectsError:
-        projects.error?.message ||
-        'Connected, but could not list projects. Try Refresh projects.',
-      clientIds: v.clientIds || [],
-      debug: projects.debug,
-    });
-  }
 
-  res.json({
-    ok: true,
-    user: v.user,
-    projects: projects.projects,
-    projectsError: projects.projects.length
-      ? null
-      : 'API returned zero projects for your client. Check org access on the token.',
-    clientIds: v.clientIds || [],
-    source: projects.source,
+  const payload = !projects.ok
+    ? {
+        ok: true,
+        user: v.user,
+        projects: [],
+        projectsError:
+          projects.error?.message ||
+          'Connected, but could not list projects. Try Refresh projects.',
+        clientIds: v.clientIds || [],
+        debug: projects.debug,
+        // Client should keep the PAT and send Authorization: Bearer on later calls
+        authMode: 'bearer+session',
+      }
+    : {
+        ok: true,
+        user: v.user,
+        projects: projects.projects,
+        projectsError: projects.projects.length
+          ? null
+          : 'API returned zero projects for your client. Check org access on the token.',
+        clientIds: v.clientIds || [],
+        source: projects.source,
+        authMode: 'bearer+session',
+      };
+
+  // Ensure Set-Cookie is flushed before body (helps when cookies are allowed)
+  req.session.save((err) => {
+    if (err) {
+      console.error(JSON.stringify({
+        timestamp: new Date().toISOString(),
+        service: 'api',
+        level: 'error',
+        message: 'session save failed after connect',
+        error: err.message,
+      }));
+    }
+    res.json(payload);
   });
 });
 
@@ -69,7 +76,9 @@ router.post('/disconnect', (req, res) => {
   delete req.session.zeropsProjectId;
   delete req.session.zeropsProjectName;
   delete req.session.zeropsClientIds;
-  res.json({ ok: true });
+  req.session.save(() => {
+    res.json({ ok: true });
+  });
 });
 
 router.get('/me', async (req, res) => {
@@ -87,13 +96,20 @@ router.get('/me', async (req, res) => {
     delete req.session.zeropsToken;
     return res.json({ ok: true, connected: false });
   }
+  const viaBearer = Boolean(
+    req.headers.authorization || req.headers.Authorization
+  );
   res.json({
     ok: true,
     connected: true,
     user: v.user,
     selectedProjectId: getSelectedProject(req),
-    selectedProjectName: req.session.zeropsProjectName || null,
-    source: req.session.zeropsToken ? 'session' : 'env',
+    selectedProjectName: getSelectedProjectName(req),
+    source: viaBearer
+      ? 'bearer'
+      : req.session?.zeropsToken
+        ? 'session'
+        : 'env',
   });
 });
 
@@ -131,6 +147,7 @@ router.post('/select-project', async (req, res) => {
 
   req.session.zeropsProjectId = String(projectId);
   if (req.body.projectName) req.session.zeropsProjectName = String(req.body.projectName);
+  const projectName = getSelectedProjectName(req);
 
   const services = await zeropsApi.listProjectServices(token, projectId);
 
@@ -143,20 +160,24 @@ router.post('/select-project', async (req, res) => {
       const created = await syncStatusIncidents(
         db,
         services.services,
-        req.session.zeropsProjectName || null,
-        req.session.zeropsProjectId
+        projectName,
+        String(projectId)
       );
       synced = created.length;
     } catch { /* best-effort */ }
   }
 
-  res.json({
+  const body = {
     ok: true,
-    projectId: req.session.zeropsProjectId,
-    projectName: req.session.zeropsProjectName || null,
+    projectId: String(projectId),
+    projectName: projectName || null,
     services: services.ok ? services.services : [],
     servicesError: services.ok ? null : services.error,
     syncedIncidents: synced,
+  };
+
+  req.session.save(() => {
+    res.json(body);
   });
 });
 
@@ -179,7 +200,7 @@ router.get('/services', async (req, res) => {
   res.json({
     ok: true,
     projectId,
-    projectName: req.session.zeropsProjectName || null,
+    projectName: getSelectedProjectName(req),
     services: r.services,
     edges: [
       { from: 'dashboard', to: 'api', label: 'HTTP' },
