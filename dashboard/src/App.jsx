@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { apiFetch, loadConfig, setAuthPat, setAuthProject, clearAuth } from './api.js';
+import { apiFetch, loadConfig, setAuthPat, setAuthProject, clearAuth, getAuthPat, getAuthProject } from './api.js';
 import profilePic from '../assests/Profile.jpg';
 
 const CREATOR = {
@@ -138,6 +138,90 @@ const VIEWS = [
   { id: 'chat', label: 'Chat', icon: 'chat' },
   { id: 'connect', label: 'Connect', icon: 'connect', special: true },
 ];
+
+/** All navigable surfaces (console + product story). */
+const VIEW_IDS = new Set(['story', ...VIEWS.map((v) => v.id)]);
+const VIEW_STORAGE_KEY = 'opsmate.view';
+
+function normalizeViewId(raw) {
+  if (raw == null) return null;
+  let id = String(raw).trim().toLowerCase();
+  // Accept "#incidents", "/incidents", "view=incidents"
+  id = id.replace(/^#/, '').replace(/^\//, '');
+  if (id.startsWith('view=')) id = id.slice(5);
+  // Map friendly aliases
+  if (id === 'home' || id === 'dashboard' || id === 'console') id = 'overview';
+  return VIEW_IDS.has(id) ? id : null;
+}
+
+function readViewFromLocation() {
+  if (typeof window === 'undefined') return null;
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const fromQuery = normalizeViewId(params.get('view') || params.get('v'));
+    if (fromQuery) return fromQuery;
+  } catch {
+    /* ignore */
+  }
+  const hashRaw = String(window.location.hash || '').replace(/^#/, '');
+  // "#incidents" or "#/incidents"
+  const fromHash = normalizeViewId(hashRaw.replace(/^\//, '').split(/[/?&]/)[0]);
+  if (fromHash) return fromHash;
+  return null;
+}
+
+function readViewFromStorage() {
+  if (typeof window === 'undefined') return null;
+  try {
+    const local = normalizeViewId(localStorage.getItem(VIEW_STORAGE_KEY));
+    if (local) return local;
+  } catch {
+    /* private mode */
+  }
+  try {
+    const session = normalizeViewId(sessionStorage.getItem(VIEW_STORAGE_KEY));
+    if (session) return session;
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+/** Query → hash → storage. Default story only on first-ever visit. */
+function readInitialView() {
+  return readViewFromLocation() || readViewFromStorage() || 'story';
+}
+
+/** Keep URL + storage in sync so refresh restores the same section. */
+function persistView(id) {
+  const viewId = normalizeViewId(id);
+  if (!viewId || typeof window === 'undefined') return;
+
+  try {
+    localStorage.setItem(VIEW_STORAGE_KEY, viewId);
+  } catch {
+    /* ignore */
+  }
+  try {
+    sessionStorage.setItem(VIEW_STORAGE_KEY, viewId);
+  } catch {
+    /* ignore */
+  }
+
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.set('view', viewId);
+    // Keep hash in sync for deep links / older code paths
+    url.hash = viewId;
+    const next = `${url.pathname}${url.search}${url.hash}`;
+    const cur = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    if (next !== cur) {
+      window.history.replaceState({ view: viewId }, '', next);
+    }
+  } catch {
+    /* ignore */
+  }
+}
 
 /** Map Zerops / demo stack status → visual tone */
 function serviceTone(status) {
@@ -665,7 +749,7 @@ function StoryLanding({ onEnter, onConnect, healthScore, healthMode }) {
       <section className="story-section" id="demo">
         <h2>Demo first. Your project when ready.</h2>
         <p className="lede">
-          Every visit and hard refresh opens here — so the product story lands before the console noise.
+          Open the story landing once; after you enter the console, refresh keeps you on the same section.
         </p>
         <div className="story-bento">
           <article className="story-step-card accent">
@@ -686,8 +770,8 @@ function StoryLanding({ onEnter, onConnect, healthScore, healthMode }) {
             <div className="n n-icon" aria-hidden>
               <NavIcon name="story" />
             </div>
-            <h3>Always this story</h3>
-            <p>Hard refresh? You’re back on the story page — not lost in a dense overview on first paint.</p>
+            <h3>Sticky section</h3>
+            <p>Refresh on Health, Incidents, or Chat and stay there — the URL hash remembers the screen.</p>
           </article>
         </div>
       </section>
@@ -1676,7 +1760,7 @@ function zeropsLogsUrl(projectId, serviceId) {
 }
 
 export default function App() {
-  const [view, setView] = useState('story');
+  const [view, setView] = useState(readInitialView);
   const [navOpen, setNavOpen] = useState(true);
   const [status, setStatus] = useState(null);
   const [incidents, setIncidents] = useState([]);
@@ -1718,6 +1802,8 @@ export default function App() {
   const [me, setMe] = useState({ connected: false });
   const [zeropsServices, setZeropsServices] = useState([]);
   const [connectBusy, setConnectBusy] = useState(false);
+  /** Avoid slamming Zerops list-projects every 8s once we have a list this session */
+  const projectsLoadedRef = useRef(false);
 
   const flash = useCallback((msg) => {
     setToast(msg);
@@ -1742,14 +1828,41 @@ export default function App() {
           total: inc.totalCount ?? (inc.openCount + (inc.resolvedCount || 0)),
         });
       }
-      setMe(meRes);
-      if (meRes.connected && meRes.selectedProjectId) {
-        try {
-          const sv = await apiFetch('/zerops/services');
-          setZeropsServices(sv.services || []);
-        } catch {
-          setZeropsServices([]);
+
+      // Restore selected project from browser storage if /me was cookie-empty but Bearer is set
+      const stored = getAuthProject();
+      const meMerged = {
+        ...meRes,
+        connected: Boolean(meRes?.connected || getAuthPat()),
+        selectedProjectId: meRes?.selectedProjectId || stored.projectId || null,
+        selectedProjectName: meRes?.selectedProjectName || stored.projectName || null,
+        user: meRes?.user,
+      };
+      setMe(meMerged);
+
+      if (meMerged.connected && getAuthPat()) {
+        // After hard reload, projects state is always [] — refill once (same as Refresh projects)
+        if (!projectsLoadedRef.current) {
+          try {
+            const proj = await apiFetch('/zerops/projects');
+            setProjects(Array.isArray(proj.projects) ? proj.projects : []);
+            projectsLoadedRef.current = true;
+          } catch {
+            /* next poll retries until success */
+          }
         }
+        if (meMerged.selectedProjectId) {
+          try {
+            const sv = await apiFetch('/zerops/services');
+            setZeropsServices(sv.services || []);
+          } catch {
+            setZeropsServices([]);
+          }
+        }
+      } else if (!meMerged.connected) {
+        setProjects([]);
+        setZeropsServices([]);
+        projectsLoadedRef.current = false;
       }
     } catch (err) {
       flash(err.message);
@@ -1857,11 +1970,32 @@ export default function App() {
   }
 
   function goToView(next) {
-    setView(next);
+    const id = normalizeViewId(next) || 'overview';
+    setView(id);
     setSelectMode(false);
     setSelectedGroups(new Set());
     setIncidentSortOpen(false);
   }
+
+  // Always mirror the active section into URL + storage (covers every path)
+  useEffect(() => {
+    persistView(view);
+  }, [view]);
+
+  // Browser back/forward or external URL edits restore the section
+  useEffect(() => {
+    function syncFromUrl() {
+      const id = readViewFromLocation();
+      if (!id) return;
+      setView((cur) => (cur === id ? cur : id));
+    }
+    window.addEventListener('hashchange', syncFromUrl);
+    window.addEventListener('popstate', syncFromUrl);
+    return () => {
+      window.removeEventListener('hashchange', syncFromUrl);
+      window.removeEventListener('popstate', syncFromUrl);
+    };
+  }, []);
 
   useEffect(() => {
     // Reset scroll whenever the view changes (window + main scroller)
@@ -2071,6 +2205,7 @@ export default function App() {
       });
       setToken('');
       setProjects(res.projects || []);
+      projectsLoadedRef.current = true;
       setMe({ connected: true, user: res.user });
       if (res.projects?.length) {
         flash(`Connected — ${res.projects.length} project(s) loaded`);
@@ -2092,6 +2227,7 @@ export default function App() {
     try {
       const res = await apiFetch('/zerops/projects');
       setProjects(res.projects || []);
+      projectsLoadedRef.current = true;
       if (!res.projects?.length) {
         flash(res.error || 'Still no projects — token may lack org/client access');
       } else {
@@ -2143,6 +2279,7 @@ export default function App() {
     try {
       await apiFetch('/zerops/disconnect', { method: 'POST' }).catch(() => {});
       clearAuth();
+      projectsLoadedRef.current = false;
       setMe({ connected: false });
       setProjects([]);
       setZeropsServices([]);
