@@ -1761,7 +1761,10 @@ function zeropsLogsUrl(projectId, serviceId) {
 
 export default function App() {
   const [view, setView] = useState(readInitialView);
+  /** Desktop sidebar expanded labels; independent of mobile drawer */
   const [navOpen, setNavOpen] = useState(true);
+  /** Mobile hamburger drawer */
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [status, setStatus] = useState(null);
   const [incidents, setIncidents] = useState([]);
   const [incidentTotals, setIncidentTotals] = useState({ open: 0, resolved: 0, total: 0 });
@@ -1972,6 +1975,7 @@ export default function App() {
   function goToView(next) {
     const id = normalizeViewId(next) || 'overview';
     setView(id);
+    setMobileNavOpen(false);
     setSelectMode(false);
     setSelectedGroups(new Set());
     setIncidentSortOpen(false);
@@ -1981,6 +1985,23 @@ export default function App() {
   useEffect(() => {
     persistView(view);
   }, [view]);
+
+  // Lock body scroll while mobile drawer is open; class for portaled UI z-index
+  useEffect(() => {
+    if (!mobileNavOpen) return undefined;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    document.body.classList.add('mobile-nav-open');
+    function onKey(e) {
+      if (e.key === 'Escape') setMobileNavOpen(false);
+    }
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.body.style.overflow = prev;
+      document.body.classList.remove('mobile-nav-open');
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [mobileNavOpen]);
 
   // Browser back/forward or external URL edits restore the section
   useEffect(() => {
@@ -2120,10 +2141,10 @@ export default function App() {
     }
   }
 
-  async function sendChat(e) {
+  async function sendChat(e, overrideQuestion) {
     e?.preventDefault?.();
-    if (!chatIn.trim() || chatBusy) return;
-    const q = chatIn.trim();
+    const q = String(overrideQuestion ?? chatIn).trim();
+    if (!q || chatBusy) return;
     const botId = `bot-${Date.now()}`;
     setChat((c) => [...c, { role: 'user', text: q, id: `u-${Date.now()}` }]);
     setChatIn('');
@@ -2167,6 +2188,37 @@ export default function App() {
       );
       setChatBusy(false);
     }
+  }
+
+  /** Jump to Chat with context about this incident's diagnosis / remediation. */
+  function askAboutIncident(inc, group) {
+    if (!inc || chatBusy) return;
+    const steps = fixSteps(inc.suggested_fix).slice(0, 8);
+    const title = (group?.primary?.title || inc.title || 'untitled incident').trim();
+    const severity = String(inc.severity || group?.severity || 'unknown');
+    const service = String(inc.service_name || 'unknown');
+    const explanation = String(inc.explanation || '').trim();
+    const question = [
+      `Help me understand this OpsMate incident and what to do next.`,
+      ``,
+      `Title: ${title}`,
+      `Service: ${service}`,
+      `Severity: ${severity}`,
+      `Status: ${group?.status || inc.status || 'open'}`,
+      explanation ? `Diagnosis: ${explanation}` : null,
+      steps.length
+        ? `Suggested remediation:\n${steps.map((s, i) => `${i + 1}. ${s}`).join('\n')}`
+        : null,
+      ``,
+      `Please explain the issue in plain language, validate whether the suggested remediations make sense, and suggest concrete next steps or clarifying checks if I'm stuck.`,
+    ]
+      .filter((line) => line != null)
+      .join('\n');
+
+    goToView('chat');
+    setTimeout(() => {
+      void sendChat(null, question);
+    }, 0);
   }
 
   function markStreamDone(id) {
@@ -2404,19 +2456,45 @@ export default function App() {
   }
 
   return (
-    <div className={`shell${navOpen ? '' : ' nav-collapsed'}`}>
-      <aside className={`nav${navOpen ? ' is-open' : ' is-closed'}`}>
+    <div
+      className={`shell${navOpen ? '' : ' nav-collapsed'}${mobileNavOpen ? ' mobile-nav-open' : ''}`}
+    >
+      {mobileNavOpen && (
+        <button
+          type="button"
+          className="nav-backdrop"
+          aria-label="Close menu"
+          onClick={() => setMobileNavOpen(false)}
+        />
+      )}
+      <aside className={`nav${navOpen ? ' is-open' : ' is-closed'}${mobileNavOpen ? ' is-mobile-open' : ''}`}>
         <div className="nav-rail">
-          <button
-            type="button"
-            className="nav-home"
-            title={navOpen ? 'Collapse sidebar' : 'Expand sidebar'}
-            aria-label={navOpen ? 'Collapse sidebar' : 'Expand sidebar'}
-            aria-expanded={navOpen}
-            onClick={() => setNavOpen((o) => !o)}
-          >
-            <ZeropsLogo />
-          </button>
+          <div className="nav-rail-top">
+            <button
+              type="button"
+              className="nav-home"
+              title={navOpen ? 'Collapse sidebar' : 'Expand sidebar'}
+              aria-label={navOpen ? 'Collapse sidebar' : 'Expand sidebar'}
+              aria-expanded={navOpen}
+              onClick={() => {
+                if (window.matchMedia('(max-width: 900px)').matches) {
+                  setMobileNavOpen(false);
+                } else {
+                  setNavOpen((o) => !o);
+                }
+              }}
+            >
+              <ZeropsLogo />
+            </button>
+            <button
+              type="button"
+              className="nav-drawer-close"
+              aria-label="Close menu"
+              onClick={() => setMobileNavOpen(false)}
+            >
+              ✕
+            </button>
+          </div>
           <div className="nav-section">
             {VIEWS.filter((v) => !v.special).map((v) => (
               <button
@@ -2476,6 +2554,19 @@ export default function App() {
 
       <header className="topbar">
         <div className="topbar-left">
+          <button
+            type="button"
+            className="topbar-menu-btn"
+            aria-label={mobileNavOpen ? 'Close navigation' : 'Open navigation'}
+            aria-expanded={mobileNavOpen}
+            onClick={() => setMobileNavOpen((o) => !o)}
+          >
+            <span className={`hamburger${mobileNavOpen ? ' is-open' : ''}`} aria-hidden>
+              <i />
+              <i />
+              <i />
+            </span>
+          </button>
           <CreatorPanel />
           <div className="topbar-brand">
             <strong>OpsMate</strong>
@@ -2735,8 +2826,8 @@ export default function App() {
               </div>
             )}
 
-            <div className="two-col">
-              <div className="panel">
+            <div className="two-col two-col-overview">
+              <div className="panel panel-overview">
                 <div className="panel-h">
                   <div>
                     <h3>Recent incidents</h3>
@@ -2750,9 +2841,9 @@ export default function App() {
                     View all
                   </button>
                 </div>
-                <div className="list">
+                <div className="list panel-overview-body">
                   {openIncidents.slice(0, 5).map((inc) => (
-                    <article key={inc.id} className="incident">
+                    <article key={inc.id} className="incident incident--compact">
                       <div className="incident-top">
                         {sevBadge(inc.severity)}
                         <span className="incident-title">{inc.title || inc.service_name}</span>
@@ -2765,16 +2856,15 @@ export default function App() {
                   ))}
                   {!openIncidents.length && (
                     <div className="empty">
-                      No open incidents.
                       {liveProject
-                        ? ' Click “Sync status → incidents” if a service is READY_TO_DEPLOY.'
-                        : ' Trigger chaos or connect a project.'}
+                        ? 'All clear — no open incidents. Sync project status if a service is stuck READY_TO_DEPLOY.'
+                        : 'All clear — no open incidents. Run Chaos lab or connect a project to surface one.'}
                     </div>
                   )}
                 </div>
               </div>
 
-              <div className="panel">
+              <div className="panel panel-overview panel-ask-overview">
                 <div className="panel-h">
                   <div>
                     <h3>Ask OpsMate</h3>
@@ -2800,18 +2890,22 @@ export default function App() {
                     Ask
                   </button>
                 </form>
-                <div style={{ marginTop: 14 }}>
+                <div className="ask-preview-scroll" aria-label="Recent chat replies">
                   {chat.slice(-2).map((m) => (
                     <ChatBubble
                       key={m.id || m.text?.slice?.(0, 20)}
                       msg={{ ...m, stream: false }}
                     />
                   ))}
+                  {!chat.length && (
+                    <div className="ask-preview-empty">
+                      Answers show here. Use Open full chat for long threads.
+                    </div>
+                  )}
                 </div>
                 <button
                   type="button"
-                  className="btn btn-ghost"
-                  style={{ marginTop: 8 }}
+                  className="btn btn-ghost ask-preview-open"
                   onClick={() => goToView('chat')}
                 >
                   Open full chat
@@ -3070,6 +3164,18 @@ export default function App() {
                       >
                         {open ? 'Hide evidence' : 'Evidence & logs'}
                       </button>
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-incident-chat"
+                        disabled={chatBusy}
+                        onClick={() => askAboutIncident(inc, group)}
+                        title="Open OpsMate chat with this incident’s diagnosis and remediations"
+                      >
+                        <span className="btn-ic" aria-hidden>
+                          <NavIcon name="chat" />
+                        </span>
+                        Ask chat
+                      </button>
                       {logsUrl && (
                         <a
                           className="btn btn-ghost"
@@ -3077,7 +3183,7 @@ export default function App() {
                           target="_blank"
                           rel="noopener noreferrer"
                         >
-                          View logs in Zerops
+                          View logs
                         </a>
                       )}
                       {group.count > 1 && (
@@ -3112,7 +3218,7 @@ export default function App() {
                             className="btn btn-restart"
                             disabled={restartBusy}
                             onClick={() => restartService(inc)}
-                            title="Restarts this service on Zerops. Suggested remediation steps above are separate — this does not apply them automatically."
+                            title="Restarts this service via the Zerops API. Suggested remediation steps above are separate — this does not apply them automatically."
                           >
                             {restartBusy ? (
                               <span className="spinner" />
@@ -3122,7 +3228,6 @@ export default function App() {
                               </span>
                             )}
                             Restart service
-                            <span className="btn-hint">Zerops API</span>
                           </button>
                         </>
                       )}
@@ -3219,10 +3324,14 @@ export default function App() {
               {!visibleIncidentGroups.length && (
                 <div className="empty panel">
                   {incidentFilter === 'resolved'
-                    ? 'No resolved incidents yet — mark open items as resolved.'
+                    ? 'No resolved incidents yet. When you close an issue, it shows up here.'
                     : incidentFilter === 'open'
-                      ? 'No open incidents. Check Resolved or All, or fire Chaos lab.'
-                      : 'No incidents yet.'}
+                      ? liveProject
+                        ? 'No open incidents — fleet looks calm. Check Resolved or All for past events, or sync status if a deploy is stuck.'
+                        : 'No open incidents in the sandbox. Fire Chaos lab for a demo, or connect a project for live signals.'
+                      : liveProject
+                        ? 'No incidents yet for this project. Sync status or wait for the next log / deploy signal.'
+                        : 'No incidents yet. Use Chaos lab or connect a project to start collecting them.'}
                 </div>
               )}
             </div>
@@ -3766,11 +3875,13 @@ export default function App() {
 
       {toast && <div className="toast">{toast}</div>}
 
-      <FloatingCoach
-        isDemo={!liveProject}
-        onChat={() => goToView('chat')}
-        onConnect={() => goToView('connect')}
-      />
+      {view !== 'chat' && (
+        <FloatingCoach
+          isDemo={!liveProject}
+          onChat={() => goToView('chat')}
+          onConnect={() => goToView('connect')}
+        />
+      )}
     </div>
   );
 }
