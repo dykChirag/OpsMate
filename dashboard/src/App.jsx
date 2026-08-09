@@ -2570,7 +2570,6 @@ export default function App() {
           <CreatorPanel />
           <div className="topbar-brand">
             <strong>OpsMate</strong>
-            <span>{liveProject ? 'Live · project scope' : 'Sandbox · demo scope'}</span>
           </div>
         </div>
         <div className="topbar-right">

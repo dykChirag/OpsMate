@@ -496,23 +496,43 @@ button, a, [role="button"], .btn, .nav-btn, .project-pick, .service-card {
 @media (max-width: 780px) {
   .creator-panel {
     height: 40px;
-    border-radius: 14px;
+    border-radius: 999px;
   }
   .creator-panel-meta {
     display: none;
   }
   .creator-panel-id {
-    padding: 0 4px;
+    padding: 0 6px 0 4px;
   }
+  /* Soft vertical join — diagonal seam looks broken next to icons only */
   .creator-panel-seam {
-    width: 10px;
+    width: 8px;
+    margin: 0;
+    clip-path: none;
+    background: linear-gradient(90deg, var(--cp-ink) 0%, var(--cp-sage) 100%);
+    z-index: 0;
   }
   .creator-panel-socials {
-    padding: 0 5px 0 3px;
+    padding: 0 6px 0 4px;
+    gap: 0;
   }
   .creator-panel-social {
-    width: 27px;
-    height: 27px;
+    width: 28px;
+    height: 28px;
+  }
+  .creator-panel-social svg {
+    width: 12px;
+    height: 12px;
+  }
+}
+
+@media (max-width: 420px) {
+  .creator-panel-seam,
+  .creator-panel-socials {
+    display: none;
+  }
+  .creator-panel-id {
+    padding: 0 5px;
   }
 }
 
@@ -939,11 +959,65 @@ button, a, [role="button"], .btn, .nav-btn, .project-pick, .service-card {
     top: 0;
     z-index: 50;
     flex-shrink: 0;
+    gap: 8px;
+    height: auto;
+    min-height: 52px;
+    padding: 6px 10px 6px 8px;
+    overflow: hidden;
   }
   .topbar-search { display: none; }
   .topbar-brand { display: none; }
-  .topbar-left { gap: 8px; }
-  .topbar-menu-btn { display: grid; }
+  .topbar-left {
+    gap: 8px;
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .topbar-menu-btn { display: grid; flex-shrink: 0; }
+  /* Creator rail can shrink; no collision with right actions */
+  .topbar-left .creator-panel {
+    flex-shrink: 1;
+    min-width: 0;
+    max-width: 100%;
+  }
+  /* Match ≤780 compact strip so mid tablets don't crush socials */
+  .topbar-left .creator-panel-meta {
+    display: none;
+  }
+  .topbar-left .creator-panel-seam {
+    width: 8px;
+    margin: 0;
+    clip-path: none;
+    background: linear-gradient(90deg, var(--cp-ink) 0%, var(--cp-sage) 100%);
+    z-index: 0;
+  }
+  .topbar-left .creator-panel {
+    height: 40px;
+    border-radius: 999px;
+  }
+  .topbar-left .creator-panel-id {
+    padding: 0 6px 0 4px;
+  }
+  .topbar-right {
+    flex-shrink: 0;
+    gap: 6px;
+    min-width: 0;
+  }
+  /* Story lives in the hamburger drawer — hide topbar control so it can't sit on socials */
+  .topbar-right > .btn-ghost {
+    display: none;
+  }
+  .topbar-status {
+    padding: 6px 9px;
+    font-size: 11px;
+    white-space: nowrap;
+  }
+  .topbar-right .btn-primary {
+    padding: 0 11px;
+    height: 36px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
 
   /* Drawer above page-head (120–130), chat (260), and portaled sort menus (10050) */
   .nav-backdrop {
